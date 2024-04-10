@@ -1,0 +1,6 @@
+RPC=
+TARGET_ADDRESS=
+TOKEN_ADDRESS=oreoN2tQbHXVaZsr3pf66A48miqcBXCDJozganhEJgz
+UNITS=300000
+LAMPORTS=200000
+FOLDER=../wallets # path with json keypairs
