@@ -22,6 +22,11 @@ if (!FOLDER) FOLDER = './'
 const connection = new Connection(RPC, { commitment: 'confirmed' })
 const TOKEN = new PublicKey(TOKEN_ADDRESS)
 
+const wait = async (time: number, message: string = ''): Promise<string> =>
+	new Promise((resolve) => {
+		setTimeout(() => resolve(message), time)
+	})
+
 const parseAccounts = () =>
 	readdirSync(FOLDER!)
 		.map((file) =>
@@ -31,16 +36,19 @@ const parseAccounts = () =>
 		)
 		.filter(Boolean)
 
-const sendToken = async (srcWallet: Keypair) => {
+const sendToken = async (i: number, srcWallet: Keypair) => {
+	const sender = srcWallet
 	try {
-		const sender = srcWallet
 		const receiver = new PublicKey(TARGET_ADDRESS!)
 		if (sender.publicKey == receiver) return
 
 		let accounts = await connection.getTokenAccountsByOwner(sender.publicKey, {
 			mint: TOKEN,
 		})
-		if (!accounts.value[0]) return
+		if (!accounts.value[0])
+			return console.log(
+				`${i} | ${sender.publicKey}: doesn't have token account!`
+			)
 
 		const senderTokenAccount = await getAssociatedTokenAddress(
 			TOKEN,
@@ -49,18 +57,26 @@ const sendToken = async (srcWallet: Keypair) => {
 		const info = await connection.getTokenAccountBalance(senderTokenAccount)
 
 		if (!senderTokenAccount || BigInt(info.value.amount) === 0n) {
-			console.log(`${sender.publicKey} have ${info.value.uiAmount} tokens`)
+			console.log(
+				`${i} | ${sender.publicKey}: have ${info.value.uiAmount} tokens`
+			)
 			return false
 		}
 
 		console.log(
-			`${sender.publicKey} have ${info.value.uiAmount} tokens, try send to ${receiver}`
+			`${i} | ${sender.publicKey}: have ${info.value.uiAmount} tokens, try send to ${receiver}`
 		)
+		if (
+			sender.publicKey.toString().toLowerCase() ===
+			receiver.toString().toLowerCase()
+		)
+			throw new Error(`equal sender and receiver address!`)
 
 		accounts = await connection.getTokenAccountsByOwner(receiver, {
 			mint: TOKEN,
 		})
-		if (!accounts.value[0]) return
+		if (!accounts.value[0])
+			throw new Error(`target wallet doesn't have ${TOKEN} account!`)
 
 		const destinationTokenAccount = await getAssociatedTokenAddress(
 			TOKEN,
@@ -100,7 +116,7 @@ const sendToken = async (srcWallet: Keypair) => {
 			maxRetries: 20,
 		})
 		console.log(
-			`Transaction Submitted: https://explorer.solana.com/tx/${signature}`
+			`${i} | ${sender.publicKey}: transaction submitted: https://explorer.solana.com/tx/${signature}`
 		)
 
 		return connection
@@ -114,19 +130,24 @@ const sendToken = async (srcWallet: Keypair) => {
 			)
 			.then((confirmation: any) => {
 				if (confirmation.value.err)
-					throw new Error('🚨 Transaction not confirmed.')
+					throw new Error(`🚨 transaction not confirmed!`)
 
 				console.log(
-					`Transaction Successfully Confirmed! 🎉 View on Explorer: https://explorer.solana.com/tx/${signature}`
+					`${i} | ${sender.publicKey}: transaction successfully sonfirmed! 🎉 View on Explorer: https://explorer.solana.com/tx/${signature}`
 				)
 			})
+			.catch((e: any) => {
+				throw new Error(`🚨 transaction not confirmed:`, e.message)
+			})
 	} catch (e: any) {
-		console.log('error', e.message)
+		console.log(`${i} | ${sender.publicKey}: error:`, e.message)
 	}
 }
 const main = async () => {
-	for (const secret of parseAccounts())
-		await sendToken(Keypair.fromSecretKey(new Uint8Array(secret)))
+	parseAccounts().map(async (secret, i) => {
+		await wait(i * 400)
+		await sendToken(i, Keypair.fromSecretKey(new Uint8Array(secret)))
+	})
 }
 
 main()
